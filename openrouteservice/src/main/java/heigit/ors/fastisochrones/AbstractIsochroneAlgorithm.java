@@ -15,6 +15,7 @@ package heigit.ors.fastisochrones;
 
 import com.graphhopper.routing.*;
 import com.graphhopper.routing.util.DefaultEdgeFilter;
+import com.graphhopper.routing.util.EdgeFilter;
 import com.graphhopper.routing.util.FlagEncoder;
 import com.graphhopper.routing.util.TraversalMode;
 import com.graphhopper.routing.weighting.Weighting;
@@ -62,7 +63,7 @@ public abstract class AbstractIsochroneAlgorithm {
     int fromNode;
     double isochroneLimit;
 
-    private CoreDijkstraFilter additionalEdgeFilter;
+    protected EdgeFilter additionalEdgeFilter;
 
     boolean inCore;
 
@@ -71,7 +72,8 @@ public abstract class AbstractIsochroneAlgorithm {
                                       TraversalMode tMode,
                                       CellStorage cellStorage,
                                       IsochroneNodeStorage isochroneNodeStorage,
-                                      EccentricityStorage eccentricityStorage) {
+                                      EccentricityStorage eccentricityStorage,
+                                      EdgeFilter additionalEdgeFilter) {
         this.weighting = weighting;
         this.flagEncoder = weighting.getFlagEncoder();
         this.traversalMode = tMode;
@@ -79,6 +81,7 @@ public abstract class AbstractIsochroneAlgorithm {
         this.cellStorage = cellStorage;
         this.isochroneNodeStorage = isochroneNodeStorage;
         this.eccentricityStorage = eccentricityStorage;
+        this.additionalEdgeFilter = additionalEdgeFilter;
         this.nodeAccess = graph.getNodeAccess();
         outEdgeExplorer = graph.createEdgeExplorer(new DefaultEdgeFilter(flagEncoder, false, true));
 

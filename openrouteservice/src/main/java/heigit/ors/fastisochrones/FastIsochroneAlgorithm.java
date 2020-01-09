@@ -13,26 +13,22 @@
  */
 package heigit.ors.fastisochrones;
 
-import com.carrotsearch.hppc.IntHashSet;
 import com.carrotsearch.hppc.IntObjectMap;
 import com.graphhopper.coll.GHIntObjectHashMap;
-import com.graphhopper.routing.EdgeIteratorStateHelper;
-import com.graphhopper.routing.util.LevelEdgeFilter;
+import com.graphhopper.routing.util.EdgeFilter;
 import com.graphhopper.routing.util.TraversalMode;
-import com.graphhopper.routing.weighting.BeelineWeightApproximator;
-import com.graphhopper.routing.weighting.ConsistentWeightApproximator;
-import com.graphhopper.routing.weighting.WeightApproximator;
 import com.graphhopper.routing.weighting.Weighting;
 import com.graphhopper.storage.Graph;
 import com.graphhopper.storage.SPTEntry;
-import com.graphhopper.util.*;
 import heigit.ors.partitioning.CellStorage;
 import heigit.ors.partitioning.EccentricityStorage;
 import heigit.ors.partitioning.IsochroneNodeStorage;
-import heigit.ors.routing.graphhopper.extensions.core.AbstractCoreRoutingAlgorithm;
-import heigit.ors.routing.graphhopper.extensions.core.CoreLMApproximator;
+import heigit.ors.routing.graphhopper.extensions.edgefilters.EdgeFilterSequence;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 
 /**
@@ -59,8 +55,9 @@ public class FastIsochroneAlgorithm extends AbstractIsochroneAlgorithm {
                                   TraversalMode tMode,
                                   CellStorage cellStorage,
                                   IsochroneNodeStorage isochroneNodeStorage,
-                                  EccentricityStorage eccentricityStorage) {
-        super(graph, weighting, tMode, cellStorage, isochroneNodeStorage, eccentricityStorage);
+                                  EccentricityStorage eccentricityStorage,
+                                  EdgeFilter additionalEdgeFilter) {
+        super(graph, weighting, tMode, cellStorage, isochroneNodeStorage, eccentricityStorage, additionalEdgeFilter);
     }
 
     @Override
@@ -93,13 +90,16 @@ public class FastIsochroneAlgorithm extends AbstractIsochroneAlgorithm {
     @Override
     void runPhase1() {
         CoreRangeDijkstra rangeSweepToAndInCore = new CoreRangeDijkstra(this);
-        rangeSweepToAndInCore.setEdgeFilter(
+        EdgeFilterSequence efs = new EdgeFilterSequence();
+        efs.add(this.additionalEdgeFilter);
+        efs.add(
                 new CellAndLevelFilter(this.isochroneNodeStorage,
                         isochroneNodeStorage.getCellId(originalFrom),
                         graph.getNodes(),
                         chGraph
                         )
         );
+        rangeSweepToAndInCore.setEdgeFilter(efs);
 //        rangeSweepToAndInCore.setEdgeFilter(new FixedCellEdgeFilter(this.isochroneNodeStorage, isochroneNodeStorage.getCellId(originalFrom), graph.getNodes()));
         rangeSweepToAndInCore.setIsochroneLimit(isochroneLimit);
         rangeSweepToAndInCore.initFrom(from);
@@ -121,7 +121,6 @@ public class FastIsochroneAlgorithm extends AbstractIsochroneAlgorithm {
 
     @Override
     public boolean finishedPhase1() {
-        //TODO when do we need this?
         return true;
     }
 
