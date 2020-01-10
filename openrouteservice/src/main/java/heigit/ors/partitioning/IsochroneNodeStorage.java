@@ -18,16 +18,12 @@
 package heigit.ors.partitioning;
 
 
-import com.graphhopper.routing.weighting.AbstractWeighting;
-import com.graphhopper.routing.weighting.Weighting;
 import com.graphhopper.storage.DataAccess;
 import com.graphhopper.storage.Directory;
 import com.graphhopper.storage.GraphHopperStorage;
 import com.graphhopper.storage.Storable;
 
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 /**
