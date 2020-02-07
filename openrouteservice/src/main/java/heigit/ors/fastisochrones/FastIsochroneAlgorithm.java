@@ -20,6 +20,8 @@ import com.graphhopper.routing.util.TraversalMode;
 import com.graphhopper.routing.weighting.Weighting;
 import com.graphhopper.storage.Graph;
 import com.graphhopper.storage.SPTEntry;
+import com.graphhopper.util.EdgeExplorer;
+import com.graphhopper.util.EdgeIterator;
 import heigit.ors.partitioning.CellStorage;
 import heigit.ors.partitioning.EccentricityStorage;
 import heigit.ors.partitioning.IsochroneNodeStorage;
@@ -45,8 +47,10 @@ public class FastIsochroneAlgorithm extends AbstractIsochroneAlgorithm {
     protected IntObjectMap<SPTEntry> bestWeightMap;
 
     protected Map<Integer, Integer> previousNodeMap, processedBorderNodesMap;
-    protected Set<Integer> isochroneNodes, isochroneEdges, isochroneEdgeNodes, processedBorderNodes, activeCells, activeBorderNodes, fullyReachableCells;
+    protected Set<Integer> isochroneNodes, isochroneEdges, isochroneEdgeNodes, activeCells, activeBorderNodes, inactiveBorderNodes, fullyReachableCells;
     protected Map<Integer, Map<Integer, Double>> upAndCoreGraphDistMap;
+
+    protected Map<Integer, IntObjectMap<SPTEntry>> activeCellMaps;
 
     int from, originalFrom;
 
@@ -72,13 +76,14 @@ public class FastIsochroneAlgorithm extends AbstractIsochroneAlgorithm {
 
         this.activeCells = new HashSet<>();
         this.activeBorderNodes = new HashSet<>();
+        this.inactiveBorderNodes = new HashSet<>();
         this.isochroneNodes = new HashSet<>();
         this.isochroneEdges = new HashSet<>();
         this.previousNodeMap = new HashMap<>();
         this.processedBorderNodesMap = new HashMap<>();
         this.isochroneEdgeNodes = new HashSet<>();
         this.fullyReachableCells = new HashSet<>();
-        this.processedBorderNodes = new HashSet<>();
+//        this.processedBorderNodes = new HashSet<>();
         this.upAndCoreGraphDistMap = new HashMap<>();
     }
 
@@ -89,32 +94,37 @@ public class FastIsochroneAlgorithm extends AbstractIsochroneAlgorithm {
 
     @Override
     void runPhase1() {
+        int startCell = isochroneNodeStorage.getCellId(originalFrom);
         CoreRangeDijkstra rangeSweepToAndInCore = new CoreRangeDijkstra(this);
-        EdgeFilterSequence efs = new EdgeFilterSequence();
-        efs.add(this.additionalEdgeFilter);
-        efs.add(
+        EdgeFilterSequence edgeFilterSequence = new EdgeFilterSequence();
+        edgeFilterSequence.add(this.additionalEdgeFilter);
+        edgeFilterSequence.add(
                 new CellAndLevelFilter(this.isochroneNodeStorage,
-                        isochroneNodeStorage.getCellId(originalFrom),
+                        startCell,
                         graph.getNodes(),
-                        chGraph
-                        )
+                        chGraph)
         );
-        rangeSweepToAndInCore.setEdgeFilter(efs);
-//        rangeSweepToAndInCore.setEdgeFilter(new FixedCellEdgeFilter(this.isochroneNodeStorage, isochroneNodeStorage.getCellId(originalFrom), graph.getNodes()));
+        rangeSweepToAndInCore.setEdgeFilter(edgeFilterSequence);
         rangeSweepToAndInCore.setIsochroneLimit(isochroneLimit);
         rangeSweepToAndInCore.initFrom(from);
         rangeSweepToAndInCore.runAlgo();
         this.bestWeightMap = rangeSweepToAndInCore.fromMap;
 
+        for(int inactiveBorderNode : inactiveBorderNodes)
+            this.bestWeightMap.remove(inactiveBorderNode);
+
         //as far as I can tell this is only duplicate information of bordernodes->weight
         for (int sweepEndNode : activeBorderNodes) {
             double dist = rangeSweepToAndInCore.fromMap.get(sweepEndNode).getWeightOfVisitedPath();
             int cell = isochroneNodeStorage.getCellId(sweepEndNode);
-
+            if(cell == startCell)
+                continue;
             if (!upAndCoreGraphDistMap.containsKey(cell))
                 upAndCoreGraphDistMap.put(cell, new HashMap<>());
             upAndCoreGraphDistMap.get(cell).put(sweepEndNode, dist);
+            this.bestWeightMap.remove(sweepEndNode);
         }
+
     }
 
 
@@ -141,19 +151,25 @@ public class FastIsochroneAlgorithm extends AbstractIsochroneAlgorithm {
 
     @Override
     void runPhase3() {
+        activeCellMaps = new HashMap<>(upAndCoreGraphDistMap.entrySet().size());
+        activeCellMaps.put(isochroneNodeStorage.getCellId(originalFrom), this.bestWeightMap);
         for (Map.Entry<Integer, Map<Integer, Double>> entry : upAndCoreGraphDistMap.entrySet()) {
             ActiveCellDijkstra activeCellDijkstra = new ActiveCellDijkstra(this);
             //Add a filter that stays within the cell.
             //TODO maybe also add a level(base)<=level(adj) filter to make it PHAST?
-            activeCellDijkstra.setEdgeFilter(new FixedCellEdgeFilter(this.isochroneNodeStorage, entry.getKey(), graph.getNodes()));
+            EdgeFilterSequence edgeFilterSequence = new EdgeFilterSequence();
+            edgeFilterSequence.add(new FixedCellEdgeFilter(this.isochroneNodeStorage, entry.getKey(), graph.getNodes()));
+            edgeFilterSequence.add(new BaseGraphFilter());
+            activeCellDijkstra.setEdgeFilter(edgeFilterSequence);
             activeCellDijkstra.setIsochroneLimit(isochroneLimit);
             //Add all the start points with their respective already visited weight
-            for (int nodeId : entry.getValue().keySet())
+            for (int nodeId : entry.getValue().keySet()) {
                 activeCellDijkstra.addInitialBordernode(nodeId, entry.getValue().get(nodeId));
-            activeCellDijkstra.fromMap = this.bestWeightMap;
+            }
+//            activeCellDijkstra.fromMap = this.bestWeightMap;
             activeCellDijkstra.init();
             activeCellDijkstra.runAlgo();
-
+            activeCellMaps.put(entry.getKey(), activeCellDijkstra.fromMap);
         }
     }
 
@@ -171,6 +187,9 @@ public class FastIsochroneAlgorithm extends AbstractIsochroneAlgorithm {
         activeBorderNodes.add(nodeId);
     }
 
+    protected void addInactiveBorderNode(int nodeId) {
+        inactiveBorderNodes.add(nodeId);
+    }
 
     public Set<Integer> getFullyReachableCells(){
         return fullyReachableCells;
@@ -186,6 +205,10 @@ public class FastIsochroneAlgorithm extends AbstractIsochroneAlgorithm {
 
     public void setOriginalFrom(int originalFrom){
         this.originalFrom = originalFrom;
+    }
+
+    public Map<Integer, IntObjectMap<SPTEntry>> getActiveCellMaps(){
+        return activeCellMaps;
     }
 
 

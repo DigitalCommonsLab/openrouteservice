@@ -575,9 +575,11 @@ public class ORSGraphHopper extends GraphHopper {
 				isochroneCoreAlgoFactoryDecorator.createPreparations(gs, isochroneCoreEdgeFilter);
 			if (!isIsochroneCorePrepared())
 				prepareIsochroneCore();
+			calculateContours();
+
 			for(Weighting weighting : isochroneCoreAlgoFactoryDecorator.getWeightings()){
 				for(FlagEncoder encoder : super.getEncodingManager().fetchEdgeEncoders()) {
-					calculateCellProperties(weighting, encoder, traversalMode, partitioningFactoryDecorator.getIsochroneNodeStorage(), partitioningFactoryDecorator.getCellStorage());
+					calculateCellProperties(weighting, encoder, TraversalMode.NODE_BASED, partitioningFactoryDecorator.getIsochroneNodeStorage(), partitioningFactoryDecorator.getCellStorage());
 				}
 			}
 		}
@@ -776,25 +778,21 @@ public class ORSGraphHopper extends GraphHopper {
 		}
 	}
 
+	private void calculateContours(){
+		if(partitioningFactoryDecorator.getCellStorage().isContourPrepared())
+			return;
+		Contour contour = new Contour(ghStorage, ghStorage.getNodeAccess(), partitioningFactoryDecorator.getIsochroneNodeStorage(), partitioningFactoryDecorator.getCellStorage());
+		contour.calcCellContourPre();
+	}
+
 	private void calculateCellProperties(Weighting weighting, FlagEncoder flagEncoder, TraversalMode traversalMode, IsochroneNodeStorage isochroneNodeStorage, CellStorage cellStorage){
-		//>> Eccentricities
-//		Eccentricity ecc = getEccentricity();
 		Eccentricity ecc = this.eccentricity;
 		if (ecc == null)
-			ecc = new Eccentricity(ghStorage);
+			ecc = new Eccentricity(ghStorage, getLocationIndex());
 		if(!ecc.loadExisting(weighting)) {
 			ecc.calcEccentricities(ghStorage, ghStorage.getBaseGraph(), weighting, flagEncoder, traversalMode, isochroneNodeStorage, cellStorage);
-			Contour contour = new Contour(ghStorage, ghStorage.getNodeAccess(), isochroneNodeStorage, cellStorage);
-			contour.calcCellContourPre();
 		}
-//		else if(cellStorage.isCorrupted()){
-////			cellStorage.init();
-//			cellStorage.reset();
-//			cellStorage.calcCellNodesMap();
-//			cellStorage.flush();
-//			Contour contour = new Contour(ghStorage, ghStorage.getNodeAccess(), isochroneNodeStorage, cellStorage);
-//			contour.calcCellContourPre();
-//		}
+
 		this.eccentricity = ecc;
 	}
 
