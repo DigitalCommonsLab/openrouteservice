@@ -20,7 +20,7 @@ public class FastIsochroneParameters {
     public static final double FLOW__SET_SPLIT_VALUE = 0.2525;
 
     //CONTOUR
-    public static final boolean CONTOUR__USE_SUPERCELLS = true;
+    public static final boolean CONTOUR__USE_SUPERCELLS = false;
     public static final boolean ECC__USERELEVANTONLY = true;
 
 
